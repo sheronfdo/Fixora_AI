@@ -46,12 +46,24 @@ class FakeData(DataAccess):
 
     def __init__(self, vehicles: dict[str, dict]):
         self._vehicles = vehicles
+        self.messages: list[dict] = []
 
     def get_vehicle(self, vehicle_id: str):
         return self._vehicles.get(vehicle_id)
 
     def get_service_records(self, vehicle_id: str):
         return []
+
+    def get_recent_messages(self, conversation_id: str, limit: int = 20):
+        return [m for m in self.messages if m["conversation_id"] == conversation_id][-limit:]
+
+    def save_chat_message(self, user_id: str, conversation_id: str, role: str, content: str):
+        self.messages.append({
+            "user_id": user_id,
+            "conversation_id": conversation_id,
+            "role": role,
+            "content": content,
+        })
 
 
 @pytest.fixture

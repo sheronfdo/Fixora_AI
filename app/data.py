@@ -42,6 +42,17 @@ class DataAccess:
             raise forbidden("This vehicle does not belong to you")
         return vehicle
 
+    def get_my_vehicles(self, user_id: str) -> list[dict]:
+        res = (
+            self._client.table("user_vehicles")
+            .select("*, make:make_id(name, is_luxury), model:model_id(name)")
+            .eq("owner_id", user_id)
+            .eq("is_active", True)
+            .order("is_default", desc=True)
+            .execute()
+        )
+        return res.data or []
+
     # --- Service history (used by Phase 5/6) ----------------------------
     def get_service_records(self, vehicle_id: str) -> list[dict]:
         res = (
@@ -52,6 +63,77 @@ class DataAccess:
             .execute()
         )
         return res.data or []
+
+    def get_next_service_due(self, vehicle_id: str) -> dict | None:
+        """The next-service recommendation from the most recent job card."""
+        records = self.get_service_records(vehicle_id)
+        for r in records:
+            if r.get("next_service_due_km") or r.get("next_service_due_date"):
+                return {
+                    "next_service_due_km": r.get("next_service_due_km"),
+                    "next_service_due_date": r.get("next_service_due_date"),
+                    "as_of": r.get("serviced_at"),
+                }
+        return None
+
+    def get_active_booking(self, user_id: str) -> dict | None:
+        res = (
+            self._client.table("bookings")
+            .select("*, services:service_id(name), vehicles:vehicle_id(name)")
+            .eq("user_id", user_id)
+            .order("created_at", desc=True)
+            .limit(1)
+            .execute()
+        )
+        rows = res.data or []
+        if not rows:
+            return None
+        b = rows[0]
+        if b.get("status") in ("Completed", "Cancelled"):
+            return None
+        return b
+
+    def get_pricing_config(self) -> dict:
+        res = self._client.table("pricing_config").select("key_name, value").execute()
+        return {r["key_name"]: r["value"] for r in (res.data or [])}
+
+    def get_latest_valuation(self, vehicle_id: str) -> dict | None:
+        """Latest cached AI valuation. Graceful if the table doesn't exist yet."""
+        try:
+            res = (
+                self._client.table("vehicle_valuations")
+                .select("condition_pct, band, value_low_lkr, value_high_lkr, generated_at")
+                .eq("vehicle_id", vehicle_id)
+                .order("generated_at", desc=True)
+                .limit(1)
+                .execute()
+            )
+            rows = res.data or []
+            return rows[0] if rows else None
+        except Exception:
+            return None
+
+    # --- Chat persistence ----------------------------------------------
+    def save_chat_message(self, user_id: str, conversation_id: str, role: str, content: str) -> None:
+        self._client.table("chat_messages").insert({
+            "user_id": user_id,
+            "conversation_id": conversation_id,
+            "role": role,
+            "content": content,
+        }).execute()
+
+    def get_recent_messages(self, conversation_id: str, limit: int = 20) -> list[dict]:
+        res = (
+            self._client.table("chat_messages")
+            .select("role, content, created_at")
+            .eq("conversation_id", conversation_id)
+            .order("created_at", desc=True)
+            .limit(limit)
+            .execute()
+        )
+        rows = res.data or []
+        rows.reverse()  # chronological
+        return rows
 
 
 @lru_cache
