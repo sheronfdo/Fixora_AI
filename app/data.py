@@ -97,6 +97,40 @@ class DataAccess:
         res = self._client.table("pricing_config").select("key_name, value").execute()
         return {r["key_name"]: r["value"] for r in (res.data or [])}
 
+    def get_market_baseline(self, make_id, model_id, year) -> dict | None:
+        try:
+            res = (
+                self._client.table("market_baseline_prices")
+                .select("base_price_lkr, sample_size, source")
+                .eq("make_id", make_id)
+                .eq("model_id", model_id)
+                .eq("year", year)
+                .maybe_single()
+                .execute()
+            )
+            return res.data if res else None
+        except Exception:
+            return None
+
+    def save_valuation(self, row: dict) -> None:
+        self._client.table("vehicle_valuations").insert(row).execute()
+
+    def get_recent_valuation(self, vehicle_id: str) -> dict | None:
+        """The full latest valuation row (for the 24h cache)."""
+        try:
+            res = (
+                self._client.table("vehicle_valuations")
+                .select("*")
+                .eq("vehicle_id", vehicle_id)
+                .order("generated_at", desc=True)
+                .limit(1)
+                .execute()
+            )
+            rows = res.data or []
+            return rows[0] if rows else None
+        except Exception:
+            return None
+
     def get_latest_valuation(self, vehicle_id: str) -> dict | None:
         """Latest cached AI valuation. Graceful if the table doesn't exist yet."""
         try:
