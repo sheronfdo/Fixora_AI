@@ -12,7 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .config import get_settings
 from .errors import ApiError, api_error_handler
-from .routers import chat, health, predict, vehicles
+from .routers import chat, health, predict, report, vehicles
 
 logging.basicConfig(
     level=logging.INFO,
@@ -38,6 +38,7 @@ def create_app() -> FastAPI:
     app.include_router(vehicles.router)
     app.include_router(chat.router)
     app.include_router(predict.router)
+    app.include_router(report.router)
     return app
 
 

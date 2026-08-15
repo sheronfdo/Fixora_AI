@@ -58,6 +58,9 @@ class FakeData(DataAccess):
     def get_service_records(self, vehicle_id: str):
         return self._records.get(vehicle_id, [])
 
+    def get_service_history_detailed(self, vehicle_id: str):
+        return self._records.get(vehicle_id, [])
+
     def get_market_baseline(self, make_id, model_id, year):
         return self._baselines.get((make_id, model_id, year))
 

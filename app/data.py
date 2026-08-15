@@ -64,6 +64,17 @@ class DataAccess:
         )
         return res.data or []
 
+    def get_service_history_detailed(self, vehicle_id: str) -> list[dict]:
+        """Chronological history with parts and the mechanic's name, for the report."""
+        res = (
+            self._client.table("service_records")
+            .select("*, service_parts(*), employees:mechanic_id(full_name)")
+            .eq("vehicle_id", vehicle_id)
+            .order("serviced_at", desc=False)
+            .execute()
+        )
+        return res.data or []
+
     def get_next_service_due(self, vehicle_id: str) -> dict | None:
         """The next-service recommendation from the most recent job card."""
         records = self.get_service_records(vehicle_id)
