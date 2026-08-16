@@ -6,6 +6,8 @@ contract, and the OpenRouter LLM config. The chatbot (Phase 5) and the
 condition/value predictor (Phase 6) are added as routers on top of this.
 """
 import logging
+import threading
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -18,11 +20,31 @@ logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s %(levelname)s %(name)s %(message)s",
 )
+logger = logging.getLogger("fixora")
+
+
+def _warm_retriever() -> None:
+    """Load the FAQ embedding model + build/cache the index once, so the first
+    real chat request isn't slow. Runs in a background thread so startup is not
+    blocked; falls back to keyword search if the ML stack is unavailable."""
+    try:
+        from .chat.knowledge import get_retriever
+
+        get_retriever().search("warm up", k=1)
+        logger.info("Retriever warmed and cached")
+    except Exception as exc:  # pragma: no cover - best effort
+        logger.warning("Retriever warm-up skipped: %s", exc)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    threading.Thread(target=_warm_retriever, daemon=True).start()
+    yield
 
 
 def create_app() -> FastAPI:
     settings = get_settings()
-    app = FastAPI(title=settings.app_name, version=settings.version)
+    app = FastAPI(title=settings.app_name, version=settings.version, lifespan=lifespan)
 
     app.add_middleware(
         CORSMiddleware,
